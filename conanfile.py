@@ -36,30 +36,6 @@ class LibsoupConan(ConanFile):
 
     def build(self):
         with tools.chdir(self.source_subfolder):
-            #with tools.environment_append({
-            #    'LD_LIBRARY_PATH' : "%s/lib"%(self.deps_cpp_info["libffi"].rootpath)
-            #    }):
-                #self.run("gtkdocize && intltoolize --automake --copy && autoreconf --force --install --verbose")
-
-                #meson = Meson(self)
-                #_defs = { 'prefix':'%s/builddir/install'%(os.getcwd()), 'libdir':'lib',
-                #'introspection' : 'true', 'gnome' : 'false', 'vapi': 'false',
-                #'gssapi' : 'false', 'tests' : 'false'
-                #}
-                #meson.configure(
-                #    defs=_defs,
-                #    source_dir = '%s'%(os.getcwd()),
-                #    build_dir= '%s/builddir'%(os.getcwd()),
-                #    pkg_config_paths=['%s/lib/pkgconfig'%(self.deps_cpp_info["libxml2"].rootpath),
-                #                      '%s/lib/pkgconfig'%(self.deps_cpp_info["glib"].rootpath),
-                #                      '%s/lib/pkgconfig'%(self.deps_cpp_info["glib-networking"].rootpath),
-                #                      '%s/lib/pkgconfig'%(self.deps_cpp_info["sqlite3"].rootpath),
-                #                      '%s/lib/pkgconfig'%(self.deps_cpp_info["libffi"].rootpath),
-                #                      ]
-                #    )
-                #meson.build(args=['-j4'])
-                #self.run('ninja -C {0} install'.format(meson.build_dir))
-
             with tools.environment_append({
                 'PKG_CONFIG_PATH' : "%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig"
                 %(self.deps_cpp_info["libxml2"].rootpath,
@@ -74,11 +50,6 @@ class LibsoupConan(ConanFile):
                 }):
 
                 #self.run("gtkdocize && intltoolize --automake --copy && autoreconf --force --install --verbose")
-                #self.run('./configure --prefix %s/build --libdir %s/build/lib --enable-introspection --without-gnome'
-                #' --disable-more-warnings --disable-vala --with-gssapi=no --disable-always-build-tests --disable-glibtest --disable-installed-tests'
-                #%(os.getcwd(),os.getcwd()))
-                #self.run("make -j4")
-                #self.run("make install")
                 _args = ["--prefix=%s/builddir"%(os.getcwd()), '--libdir=%s/builddir/lib'%(os.getcwd()) ,
                          "--enable-introspection", "--without-gnome", "--disable-vala", "-with-gssapi=no",
                          "--disable-more-warnings", "--disable-always-build-tests", "--disable-glibtest", 
