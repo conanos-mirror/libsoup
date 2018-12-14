@@ -1,73 +1,78 @@
 from conans import ConanFile, CMake, tools, Meson
-import os
+from conanos.build import config_scheme
+import os, shutil
 
 class LibsoupConan(ConanFile):
     name = "libsoup"
-    version = "2.62.3"
+    version = "2.65.1"
     description = "The libsoup is a HTTP client/server library for GNOME"
     url = "https://github.com/conanos/libsoup"
     homepage = "https://developer.gnome.org/libsoup/stable/"
-    license = "LGPLv2Plus"
+    license = "LGPL-2+"
+    exports = ["COPYING"]
+    exports_sources = ["soup-session.c"]
+    generators = "visual_studio", "gcc"
     settings = "os", "compiler", "build_type", "arch"
-    options = {"shared": [True, False]}
-    default_options = "shared=True"
-    generators = "cmake"
-    requires = ("libxml2/2.9.8@conanos/dev", "glib/2.58.0@conanos/dev",
-                "glib-networking/2.58.0@conanos/dev","sqlite3/3.21.0@conanos/dev",
-                "libffi/3.3-rc0@conanos/dev","gobject-introspection/1.58.0@conanos/dev",)
+    options = {"shared": [True, False], "fPIC": [True, False]}
+    default_options = { 'shared': True, 'fPIC': True }
 
-    source_subfolder = "source_subfolder"
+    #requires = ("libxml2/2.9.8@conanos/dev", "glib/2.58.0@conanos/dev",
+    #            "glib-networking/2.58.0@conanos/dev","sqlite3/3.21.0@conanos/dev",
+    #            "libffi/3.3-rc0@conanos/dev","gobject-introspection/1.58.0@conanos/dev",)
+
+    _source_subfolder = "source_subfolder"
+    _build_subfolder = "build_subfolder"
+
+    def config_options(self):
+        if self.settings.os == "Windows":
+            del self.options.fPIC
+
+    def configure(self):
+        del self.settings.compiler.libcxx
+
+        config_scheme(self)
+
+    def requirements(self):
+        self.requires.add("glib/2.58.1@conanos/stable")
+        self.requires.add("libffi/3.299999@conanos/stable")
+        self.requires.add("libpsl/0.20.2@conanos/stable")
+        self.requires.add("sqlite3/3.21.0@conanos/stable")
+        self.requires.add("libxml2/2.9.8@conanos/stable")
+
+    def build_requirements(self):
+        self.build_requires("zlib/1.2.11@conanos/stable")
+        self.build_requires("libiconv/1.15@conanos/stable")
 
     def source(self):
-        maj_ver = '.'.join(self.version.split('.')[0:2])
-        tarball_name = '{name}-{version}.tar'.format(name=self.name, version=self.version)
-        archive_name = '%s.xz' % tarball_name
-        url_ = 'http://ftp.gnome.org/pub/gnome/sources/libsoup/{0}/{1}'.format(maj_ver,archive_name)
-        tools.download(url_, archive_name)
-        
+        url_ = "https://github.com/GNOME/libsoup/archive/{version}.tar.gz".format(version=self.version)
+        tools.get(url_)
+        extracted_dir = self.name + "-" + self.version
+        os.rename(extracted_dir, self._source_subfolder)
         if self.settings.os == 'Windows':
-            self.run('7z x %s' % archive_name)
-            self.run('7z x %s' % tarball_name)
-            os.unlink(tarball_name)
-        else:
-            self.run('tar -xJf %s' % archive_name)
-        os.rename('%s-%s' %( self.name, self.version), self.source_subfolder)
-        os.unlink(archive_name)
+            shutil.copy2(os.path.join(self.source_folder,"soup-session.c"), os.path.join(self.source_folder,self._source_subfolder,"libsoup","soup-session.c"))
 
     def build(self):
-        with tools.chdir(self.source_subfolder):
+        pkg_config_paths=[ os.path.join(self.deps_cpp_info[i].rootpath, "lib", "pkgconfig") for i in ["glib","libffi","libpsl","zlib","sqlite3","libxml2"] ]
+        prefix = os.path.join(self.build_folder, self._build_subfolder, "install")
+        defs = {'prefix' : prefix, "gnome" : "false", "introspection":"false","gssapi":"false","vapi":"false","tests":"false"}
+        if self.settings.os == "Linux":
+            defs.update({'libdir':'lib'})
+        
+        binpath=[ os.path.join(self.deps_cpp_info[i].rootpath, "bin") for i in ["glib","libffi"] ]
+        include = [ os.path.join(self.deps_cpp_info["libxml2"].rootpath, "include", "libxml2"),
+                    os.path.join(self.deps_cpp_info["libiconv"].rootpath, "include")  ]
+        meson = Meson(self)
+        if self.settings.os == 'Windows':
             with tools.environment_append({
-                'PKG_CONFIG_PATH' : "%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig:%s/lib/pkgconfig"
-                %(self.deps_cpp_info["libxml2"].rootpath,
-                self.deps_cpp_info["glib"].rootpath,
-                self.deps_cpp_info["glib-networking"].rootpath,
-                self.deps_cpp_info["sqlite3"].rootpath,
-                self.deps_cpp_info["libffi"].rootpath,
-                self.deps_cpp_info["gobject-introspection"].rootpath,),
-                'LD_LIBRARY_PATH' : "%s/lib:%s/lib"%(self.deps_cpp_info["libffi"].rootpath,self.deps_cpp_info["sqlite3"].rootpath),
-                'LDFLAGS' : "-L%s/lib/gio/modules"%(self.deps_cpp_info["glib-networking"].rootpath),
-                'LIBS' : "-lgiognutls"
+                "INCLUDE" : os.pathsep.join(include + [os.getenv('INCLUDE')]),
+                'PATH' : os.pathsep.join(binpath + [os.getenv('PATH')]),
                 }):
-
-                #self.run("gtkdocize && intltoolize --automake --copy && autoreconf --force --install --verbose")
-                _args = ["--prefix=%s/builddir"%(os.getcwd()), '--libdir=%s/builddir/lib'%(os.getcwd()) ,
-                         "--enable-introspection", "--without-gnome", "--disable-vala", "-with-gssapi=no",
-                         "--disable-more-warnings", "--disable-always-build-tests", "--disable-glibtest", 
-                         "--disable-installed-tests"]
-
-                if self.options.shared:
-                    _args.extend(['--enable-shared=yes','--enable-static=no'])
-                else:
-                    _args.extend(['--enable-shared=no','--enable-static=yes'])
-                
-                self.run('./configure %s'%(' '.join(_args)))#space
-                self.run('make -j4')
-                self.run('make install')
+                meson.configure(defs=defs,source_dir=self._source_subfolder, build_dir=self._build_subfolder,pkg_config_paths=pkg_config_paths)
+                meson.build()
+                self.run('ninja -C {0} install'.format(meson.build_dir))
 
     def package(self):
-        if tools.os_info.is_linux:
-            with tools.chdir(self.source_subfolder):
-                self.copy("*", src="%s/builddir"%(os.getcwd()))
+        self.copy("*", dst=self.package_folder, src=os.path.join(self.build_folder,self._build_subfolder, "install"))
 
     def package_info(self):
         self.cpp_info.libs = tools.collect_libs(self)
